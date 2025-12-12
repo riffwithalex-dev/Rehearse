@@ -1,6 +1,8 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Music, Calendar, Settings, Mic2, Disc, Sliders } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import DbErrorBanner from './DbErrorBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,6 +24,14 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
 );
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/signin');
+  };
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-gray-900 font-sans selection:bg-gray-200 selection:text-black flex">
       {/* Sidebar (Desktop) */}
@@ -52,6 +62,24 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Main Content */}
       <main className="flex-1 md:ml-24 p-6 md:p-12 pb-24 md:pb-12 max-w-7xl mx-auto w-full">
+        <header className="flex items-center justify-between mb-6">
+          <div></div>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                <div className="text-sm text-gray-700">{user.email}</div>
+                <button onClick={handleSignOut} className="px-3 py-1 border rounded text-sm">Sign out</button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => navigate('/signin')} className="px-3 py-1 border rounded text-sm">Sign in</button>
+                <button onClick={() => navigate('/signup')} className="px-3 py-1 bg-black text-white rounded text-sm">Sign up</button>
+              </>
+            )}
+          </div>
+        </header>
+
+        <DbErrorBanner />
         {children}
       </main>
     </div>

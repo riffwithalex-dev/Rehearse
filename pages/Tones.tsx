@@ -19,7 +19,7 @@ export const Tones: React.FC = () => {
   const [newGuitar, setNewGuitar] = useState('');
   const [newPickup, setNewPickup] = useState('');
 
-  const allTags = Array.from(new Set(presets.flatMap(t => t.tags)));
+  const allTags = Array.from(new Set(presets.flatMap(t => (t as any).tags ?? (t as any).style_tags ?? [])));
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +143,14 @@ export const Tones: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {presets.filter(t => filter === 'All' || t.tags.includes(filter)).map((preset, idx) => (
+        {presets.filter(t => {
+          const tags = (t as any).tags ?? (t as any).style_tags ?? [];
+          return filter === 'All' || tags.includes(filter);
+        }).map((preset, idx) => {
+          const amp = (preset as any).ampSettings ?? (preset as any).amp_settings ?? { gain: 5, bass: 5, mid: 5, treble: 5, reverb: 3, volume: 5 };
+          const effects = (preset as any).effects ?? (preset as any).effects_chain ?? [];
+          const tags = (preset as any).tags ?? (preset as any).style_tags ?? [];
+          return (
           <GlassCard key={preset.id} delay={idx * 0.1} className="group">
              <div className="flex justify-between items-start mb-6">
                 <div>
@@ -166,47 +173,47 @@ export const Tones: React.FC = () => {
              {/* Amp Settings */}
              <div className="bg-white/50 rounded-2xl p-4 mb-6 border border-gray-100/50">
                 <div className="flex justify-between items-end gap-2">
-                   <Knob label="Gain" value={preset.ampSettings.gain} />
-                   <Knob label="Bass" value={preset.ampSettings.bass} />
-                   <Knob label="Mid" value={preset.ampSettings.mid} />
-                   <Knob label="Treb" value={preset.ampSettings.treble} />
-                   <Knob label="Rev" value={preset.ampSettings.reverb} />
-                   <Knob label="Vol" value={preset.ampSettings.volume} />
+                   <Knob label="Gain" value={amp.gain} />
+                   <Knob label="Bass" value={amp.bass} />
+                   <Knob label="Mid" value={amp.mid} />
+                   <Knob label="Treb" value={amp.treble} />
+                   <Knob label="Rev" value={amp.reverb} />
+                   <Knob label="Vol" value={amp.volume} />
                 </div>
              </div>
-
-             {/* Pedal Chain */}
-             {preset.effects.length > 0 && (
-               <div className="space-y-3">
+               {/* Pedal Chain */}
+               {effects.length > 0 && (
+                <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs font-medium text-gray-400 uppercase tracking-wider">
-                     <Zap size={12} /> Signal Chain
+                    <Zap size={12} /> Signal Chain
                   </div>
                   <div className="flex flex-wrap gap-2">
-                     {preset.effects.map((effect) => (
-                        <div 
-                          key={effect.id} 
-                          className={`
-                            px-3 py-2 rounded-lg text-xs font-medium border flex items-center gap-2
-                            ${effect.isOn 
-                              ? 'bg-gray-900 text-white border-gray-900' 
-                              : 'bg-white text-gray-400 border-gray-200 line-through decoration-gray-300'}
-                          `}
-                        >
-                           {effect.name}
-                        </div>
-                     ))}
+                    {effects.map((effect: any) => (
+                      <div 
+                        key={effect.id || effect.name}
+                        className={`
+                         px-3 py-2 rounded-lg text-xs font-medium border flex items-center gap-2
+                         ${effect.isOn 
+                          ? 'bg-gray-900 text-white border-gray-900' 
+                          : 'bg-white text-gray-400 border-gray-200 line-through decoration-gray-300'}
+                        `}
+                      >
+                        {effect.name}
+                      </div>
+                    ))}
                   </div>
-               </div>
-             )}
+                </div>
+               )}
              
              {/* Tags footer */}
              <div className="mt-6 pt-4 border-t border-gray-100 flex gap-2">
-                {preset.tags.map(tag => (
+                 {tags.map((tag: string) => (
                    <span key={tag} className="text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded">#{tag}</span>
-                ))}
+                 ))}
              </div>
-          </GlassCard>
-        ))}
+             </GlassCard>
+             );
+            })}
 
         {/* Add New Card Placeholder */}
         <GlassCard 
