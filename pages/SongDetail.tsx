@@ -87,9 +87,9 @@ export const SongDetail: React.FC = () => {
                                {preset.description}
                             </div>
                             <div className="flex flex-wrap gap-1">
-                               {preset.tags.slice(0, 3).map(tag => (
+                               {preset.tags.slice(0, 3).map((tag, tagIdx) => (
                                   <span 
-                                    key={tag} 
+                                    key={`${preset.id}-tag-${tagIdx}`} 
                                     className={`text-[10px] px-1.5 py-0.5 rounded ${
                                        isSelected ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-500'
                                     }`}
@@ -175,7 +175,7 @@ export const SongDetail: React.FC = () => {
                       
                       {[0, 25, 50, 75, 100].map((step) => (
                         <button
-                          key={step}
+                          key={`progress-${component.id}-${step}`}
                           onClick={() => handleUpdateProgress(component.id, step)}
                           className={`
                             w-4 h-4 rounded-full border-2 transition-all duration-300 z-10
@@ -228,8 +228,8 @@ export const SongDetail: React.FC = () => {
                              <Zap size={12} /> Signal Chain
                          </div>
                          <div className="flex flex-col gap-2">
-                             {tonePreset.effects.map(effect => (
-                                <div key={effect.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg">
+                             {tonePreset.effects.map((effect, idx) => (
+                                <div key={effect.id || `effect-${idx}`} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg">
                                    <div className="flex items-center gap-3">
                                       <div className={`w-2 h-2 rounded-full ${effect.isOn ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-gray-300'}`} />
                                       <span className={`font-medium ${effect.isOn ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{effect.name}</span>
@@ -257,11 +257,11 @@ export const SongDetail: React.FC = () => {
                  )}
                  
                  <div className="grid grid-cols-2 gap-4">
-                    <GlassCard className="p-4">
+                    <GlassCard key="guitar-model" className="p-4">
                        <span className="text-xs text-gray-400 uppercase tracking-wider block mb-2">Guitar</span>
                        <span className="font-medium text-gray-900 block">{tonePreset?.guitarModel || 'Not specified'}</span>
                     </GlassCard>
-                    <GlassCard className="p-4">
+                    <GlassCard key="pickup-position" className="p-4">
                        <span className="text-xs text-gray-400 uppercase tracking-wider block mb-2">Pickup</span>
                        <span className="font-medium text-gray-900 block">{tonePreset?.pickupPosition || 'Not specified'}</span>
                     </GlassCard>
