@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { SongCard } from '../components/SongCard';
 import { useNavigate } from 'react-router-dom';
+import { generateUUID } from '../lib/uuid';
 import { Plus, LayoutGrid, List, X } from 'lucide-react';
 import { Reorder, AnimatePresence, motion } from 'framer-motion';
 import { Project, Song, Difficulty, SongStatus } from '../types';
@@ -40,7 +41,7 @@ export const Projects: React.FC = () => {
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
     const newProject: Project = {
-      id: `p${Date.now()}`,
+      id: generateUUID(),
       name: newProjectName,
       bandName: newProjectBand,
       description: newProjectDesc,
@@ -59,16 +60,16 @@ export const Projects: React.FC = () => {
   const handleCreateSong = (e: React.FormEvent) => {
     e.preventDefault();
     const newSong: Song = {
-      id: `s${Date.now()}`,
+      id: generateUUID(),
       projectId: activeProject,
       title: newSongTitle,
       artist: newSongArtist,
       difficulty: newSongDifficulty,
       status: newSongStatus,
       components: [
-        { id: `c${Date.now()}_1`, name: 'Intro', type: 'Intro', progress: 0 },
-        { id: `c${Date.now()}_2`, name: 'Verse', type: 'Verse', progress: 0 },
-        { id: `c${Date.now()}_3`, name: 'Chorus', type: 'Chorus', progress: 0 },
+        { id: generateUUID(), name: 'Intro', type: 'Intro', progress: 0 },
+        { id: generateUUID(), name: 'Verse', type: 'Verse', progress: 0 },
+        { id: generateUUID(), name: 'Chorus', type: 'Chorus', progress: 0 },
       ], // Default components
       lastPlayed: undefined,
     };

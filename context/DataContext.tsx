@@ -75,34 +75,53 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // If Supabase env vars are present, load data from Supabase and use it as the source of truth.
   useEffect(() => {
-    if (!hasSupabase()) return;
+    if (!hasSupabase() || !user?.id) return;
     const supabase = getSupabase();
 
     async function load() {
       try {
-        const { data: pData, error: pErr } = await supabase.from('projects').select('*');
+        // Filter projects by user_id
+        const { data: pData, error: pErr } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('user_id', user.id);
         if (pErr) throw pErr;
-        if (pData) setProjects(pData.map(normalizeProject));
-
-        const { data: sData, error: sErr } = await supabase.from('songs').select('*');
-        if (sErr) throw sErr;
-        if (sData) {
-          // Load components for each song
-          const songsWithComponents = await Promise.all(
-            sData.map(async (song: any) => {
-              const { data: compData, error: compErr } = await supabase
-                .from('song_components')
-                .select('*')
-                .eq('song_id', song.id);
-              return normalizeSong({ ...song, components: compErr ? [] : (compData || []) });
-            })
-          );
-          setSongs(songsWithComponents);
+        if (pData && pData.length > 0) {
+          setProjects(pData.map(normalizeProject));
         }
 
-        const { data: tData, error: tErr } = await supabase.from('tone_presets').select('*');
+        // Get songs from user's projects
+        if (pData && pData.length > 0) {
+          const projectIds = pData.map(p => p.id);
+          const { data: sData, error: sErr } = await supabase
+            .from('songs')
+            .select('*')
+            .in('project_id', projectIds);
+          if (sErr) throw sErr;
+          if (sData && sData.length > 0) {
+            // Load components for each song
+            const songsWithComponents = await Promise.all(
+              sData.map(async (song: any) => {
+                const { data: compData, error: compErr } = await supabase
+                  .from('song_components')
+                  .select('*')
+                  .eq('song_id', song.id);
+                return normalizeSong({ ...song, components: compErr ? [] : (compData || []) });
+              })
+            );
+            setSongs(songsWithComponents);
+          }
+        }
+
+        // Filter tone presets by user_id
+        const { data: tData, error: tErr } = await supabase
+          .from('tone_presets')
+          .select('*')
+          .eq('user_id', user.id);
         if (tErr) throw tErr;
-        if (tData) setTonePresets(tData.map(normalizeTonePreset));
+        if (tData && tData.length > 0) {
+          setTonePresets(tData.map(normalizeTonePreset));
+        }
       } catch (e) {
         // keep mock fallback
         // store error for UI
@@ -113,7 +132,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     load();
-  }, []);
+  }, [user?.id]);
 
   const addProject = (project: Project) => {
     setProjects(prev => [...prev, project]);

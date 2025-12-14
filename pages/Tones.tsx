@@ -5,6 +5,7 @@ import { Knob } from '../components/ui/Knob';
 import { Plus, Sliders, Zap, Tag, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { TonePreset } from '../types';
+import { generateUUID } from '../lib/uuid';
 
 export const Tones: React.FC = () => {
   const { tonePresets: presets, addTonePreset } = useData();
@@ -24,7 +25,7 @@ export const Tones: React.FC = () => {
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const newPreset: TonePreset = {
-      id: `t${Date.now()}`,
+      id: generateUUID(),
       name: newName,
       description: newDesc,
       guitarModel: newGuitar,
