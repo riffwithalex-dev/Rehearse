@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Project, Song, TonePreset, PracticeSession } from '../types';
+import { PracticeVideo } from '../types';
 import { MOCK_PROJECTS, MOCK_SONGS, MOCK_TONE_PRESETS } from '../constants';
 import { hasSupabase, getSupabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
@@ -19,6 +20,10 @@ function normalizeSong(row: any): Song {
     duration: row.duration,
     bpm: row.tempo,
     tabUrl: row.tab_url,
+    tabContent: row.tab_content ?? undefined,
+    backingTrackUrl: row.backing_track_url ?? undefined,
+    referenceUrl: row.reference_url ?? undefined,
+    notes: row.notes ?? undefined,
     tonePresetId: row.tone_preset_id,
     album: row.album,
     key: row.key,
@@ -64,13 +69,16 @@ interface DataContextType {
   tonePresets: TonePreset[];
   todaysScheduleIds: string[];
   practiceSessions: { [songId: string]: PracticeSession[] };
+  practiceVideos: { [songId: string]: PracticeVideo[] };
   addProject: (project: Project) => void;
   addSong: (song: Song) => void;
   addTonePreset: (preset: TonePreset) => void;
   updateSong: (id: string, updates: Partial<Song>) => void;
   addToSchedule: (songId: string) => void;
-  addPracticeSession: (songId: string, durationMinutes: number, notes?: string) => void;
+  addPracticeSession: (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => void;
+  addSongResource: (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => void;
   getPracticeSessionsForSong: (songId: string) => PracticeSession[];
+  getPracticeVideosForSong: (songId: string) => PracticeVideo[];
   dbError?: string | null;
   clearDbError: () => void;
 }
@@ -84,6 +92,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [tonePresets, setTonePresets] = useState<TonePreset[]>(MOCK_TONE_PRESETS);
   const [todaysScheduleIds, setTodaysScheduleIds] = useState<string[]>(MOCK_SONGS.slice(0, 3).map(s => s.id));
   const [practiceSessions, setPracticeSessions] = useState<{ [songId: string]: PracticeSession[] }>({});
+  const [practiceVideos, setPracticeVideos] = useState<{ [songId: string]: PracticeVideo[] }>({});
   const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,6 +128,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               })
             );
             setSongs(songsWithComponents);
+
+            // Load practice videos for these songs
+            const songIds = songsWithComponents.map((s: Song) => s.id);
+            if (songIds.length > 0) {
+              const { data: vidData, error: vidErr } = await supabase
+                .from('practice_videos')
+                .select('*')
+                .in('song_id', songIds);
+              if (!vidErr && vidData && vidData.length > 0) {
+                const grouped: { [songId: string]: PracticeVideo[] } = {};
+                vidData.forEach((v: any) => {
+                  const pv: PracticeVideo = {
+                    id: v.id,
+                    songId: v.song_id,
+                    title: v.title,
+                    url: v.url,
+                    description: v.description ?? null,
+                    recordedAt: new Date(v.recorded_at || v.created_at),
+                  };
+                  grouped[pv.songId] = grouped[pv.songId] ?? [];
+                  grouped[pv.songId].push(pv);
+                });
+                setPracticeVideos(prev => ({ ...prev, ...grouped }));
+              }
+            }
           }
         }
 
@@ -305,7 +339,25 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const addPracticeSession = (songId: string, durationMinutes: number, notes?: string) => {
+  const uploadToCloudinary = async (file: File): Promise<string | null> => {
+    try {
+      const cloudName = (import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string) || '';
+      const uploadPreset = (import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string) || '';
+      if (!cloudName || !uploadPreset) return null;
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', uploadPreset);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, { method: 'POST', body: fd });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.secure_url ?? null;
+    } catch (e) {
+      console.error('Cloudinary upload error', e);
+      return null;
+    }
+  };
+
+  const addPracticeSession = (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => {
     const newSession: PracticeSession = {
       id: generateUUID(),
       date: new Date(),
@@ -330,6 +382,34 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           };
           const { error } = await supabase.from('practice_sessions').insert(payload);
           if (error) throw error;
+          // If a media file was provided, upload to Cloudinary and insert a practice_videos row
+          if (mediaFile) {
+            const url = await uploadToCloudinary(mediaFile);
+            if (url) {
+              const videoPayload: any = {
+                id: generateUUID(),
+                song_id: songId,
+                component_id: null,
+                title: mediaTitle ?? 'Practice Recording',
+                url,
+                description: notes ?? null,
+                recorded_at: new Date().toISOString(),
+              };
+              const { error: vidErr } = await supabase.from('practice_videos').insert(videoPayload);
+              if (vidErr) console.error('practice_videos insert error', vidErr);
+              else {
+                const pv: PracticeVideo = {
+                  id: videoPayload.id,
+                  songId: songId,
+                  title: videoPayload.title,
+                  url: videoPayload.url,
+                  description: videoPayload.description ?? null,
+                  recordedAt: new Date(videoPayload.recorded_at),
+                };
+                setPracticeVideos(prev => ({ ...prev, [songId]: [...(prev[songId] ?? []), pv] }));
+              }
+            }
+          }
         } catch (error) {
           console.error('Supabase insert practice_session error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error logging practice session');
@@ -338,8 +418,42 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const addSongResource = (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => {
+    setSongs(prev => prev.map(s => s.id === songId ? {
+      ...s,
+      tabUrl: resources.tabUrl !== undefined ? resources.tabUrl : s.tabUrl,
+      tabContent: resources.tabContent !== undefined ? resources.tabContent : (s as any).tabContent,
+      backingTrackUrl: resources.backingTrackUrl !== undefined ? resources.backingTrackUrl : (s as any).backingTrackUrl,
+    } : s));
+    if (hasSupabase()) {
+      const supabase = getSupabase();
+      (async () => {
+        try {
+          const payload: any = {};
+          if (resources.tabUrl !== undefined) payload.tab_url = resources.tabUrl;
+          if (resources.backingTrackUrl !== undefined) payload.backing_track_url = resources.backingTrackUrl;
+          if (resources.tabContent !== undefined) payload.tab_content = resources.tabContent;
+          if (Object.keys(payload).length === 0) return;
+          const { data, error } = await supabase.from('songs').update(payload).eq('id', songId).select().single();
+          if (error) throw error;
+          if (data) {
+            const normalized = normalizeSong(data);
+            setSongs(prev => prev.map(s => s.id === songId ? normalized : s));
+          }
+        } catch (error) {
+          console.error('Supabase update song resources error:', error);
+          setDbError((error as any)?.message ? String((error as any).message) : 'Error updating song resources');
+        }
+      })();
+    }
+  };
+
   const getPracticeSessionsForSong = (songId: string): PracticeSession[] => {
     return practiceSessions[songId] ?? [];
+  };
+
+  const getPracticeVideosForSong = (songId: string): PracticeVideo[] => {
+    return practiceVideos[songId] ?? [];
   };
 
   const clearDbError = () => setDbError(null);
@@ -351,13 +465,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       tonePresets,
       todaysScheduleIds,
       practiceSessions,
+      practiceVideos,
       addProject,
       addSong,
       addTonePreset,
       updateSong,
       addToSchedule,
       addPracticeSession,
+      addSongResource,
       getPracticeSessionsForSong,
+      getPracticeVideosForSong,
       dbError,
       clearDbError
     }}>

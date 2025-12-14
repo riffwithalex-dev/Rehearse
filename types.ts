@@ -48,6 +48,10 @@ export interface Song {
   duration?: string;
   bpm?: number;
   tabUrl?: string;
+  tabContent?: string;
+  backingTrackUrl?: string;
+  referenceUrl?: string;
+  notes?: string;
   tonePresetId?: string; // Link to a tone preset
 }
 
@@ -65,4 +69,13 @@ export interface PracticeSession {
   date: Date;
   songId: string;
   durationMinutes: number;
+}
+
+export interface PracticeVideo {
+  id: string;
+  songId: string;
+  title: string;
+  url: string;
+  description?: string | null;
+  recordedAt: Date;
 }

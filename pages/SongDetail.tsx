@@ -1,22 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Knob } from '../components/ui/Knob';
-import { ArrowLeft, Play, ExternalLink, MoreHorizontal, Video, Mic2, Sliders, Zap, X, Check } from 'lucide-react';
+import { ArrowLeft, Play, ExternalLink, MoreHorizontal, Video, Mic2, Sliders, Zap, X, Check, Link as LinkIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const SongDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { songs, updateSong, tonePresets } = useData();
+   const { songs, updateSong, tonePresets, addSongResource, addPracticeSession, getPracticeVideosForSong } = useData();
   
   const song = songs.find(s => s.id === id);
   
   const [activeTab, setActiveTab] = useState<'progress' | 'tone'>('progress');
   const [isSelectingPreset, setIsSelectingPreset] = useState(false);
+   const [isEditingTabs, setIsEditingTabs] = useState(false);
+   const [isEditingBacking, setIsEditingBacking] = useState(false);
+   const [isAddingPractice, setIsAddingPractice] = useState(false);
 
-  if (!song) return <div className="p-8 text-center text-gray-500">Song not found</div>;
+   // Resource / practice form state (must be declared unconditionally)
+   const [tabUrlInput, setTabUrlInput] = useState(song?.tabUrl ?? '');
+   const [tabContentInput, setTabContentInput] = useState((song as any)?.tabContent ?? '');
+   const [backingUrlInput, setBackingUrlInput] = useState((song as any)?.backingTrackUrl ?? '');
+   const [practiceDuration, setPracticeDuration] = useState(10);
+   const [practiceNotes, setPracticeNotes] = useState('');
+   const [practiceFile, setPracticeFile] = useState<File | null>(null);
+   const [activeVideo, setActiveVideo] = useState<{ id: string; url: string; title: string } | null>(null);
+
+   // Sync form state when song data changes (e.g. on page reload)
+   useEffect(() => {
+     if (song) {
+       setTabUrlInput(song.tabUrl ?? '');
+       setTabContentInput((song as any)?.tabContent ?? '');
+       setBackingUrlInput((song as any)?.backingTrackUrl ?? '');
+     }
+   }, [song]);
+
+   // Prevent body scroll when modal is open
+   useEffect(() => {
+     const isModalOpen = isEditingTabs || isEditingBacking || isAddingPractice || isSelectingPreset || activeVideo;
+     if (isModalOpen) {
+       document.documentElement.style.overflow = 'hidden';
+     } else {
+       document.documentElement.style.overflow = '';
+     }
+     return () => {
+       document.documentElement.style.overflow = '';
+     };
+   }, [isEditingTabs, isEditingBacking, isAddingPractice, isSelectingPreset, activeVideo]);
+
+   if (!song) return <div className="p-8 text-center text-gray-500">Song not found</div>;
 
   const tonePreset = tonePresets.find(t => t.id === song.tonePresetId);
 
@@ -32,6 +66,7 @@ export const SongDetail: React.FC = () => {
     setIsSelectingPreset(false);
   };
 
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 relative">
       {/* Preset Selection Modal */}
@@ -42,14 +77,14 @@ export const SongDetail: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm"
+              className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto"
               onClick={() => setIsSelectingPreset(false)}
             />
             <motion.div
                initial={{ opacity: 0, scale: 0.95, y: 20 }}
                animate={{ opacity: 1, scale: 1, y: 0 }}
                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-               className="w-full max-w-md z-10"
+               className="w-full max-w-md z-10 pointer-events-auto relative"
             >
                <GlassCard className="flex flex-col max-h-[80vh]">
                   <div className="flex justify-between items-center mb-6">
@@ -106,7 +141,117 @@ export const SongDetail: React.FC = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+         </AnimatePresence>
+
+         {/* Tabs Modal */}
+         <AnimatePresence>
+            {isEditingTabs && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto" onClick={() => setIsEditingTabs(false)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} className="w-full max-w-xl z-10 pointer-events-auto relative">
+                     <GlassCard>
+                        <div className="flex justify-between items-center mb-4">
+                           <h3 className="text-lg font-medium">Edit Guitar Tabs</h3>
+                           <button onClick={() => setIsEditingTabs(false)} className="text-gray-400"><X size={18} /></button>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); addSongResource(song.id, { tabUrl: tabUrlInput, tabContent: tabContentInput }); setIsEditingTabs(false); }} className="space-y-4">
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Tab URL</label>
+                              <input value={tabUrlInput} onChange={e => setTabUrlInput(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Tab Content</label>
+                              <textarea value={tabContentInput} onChange={e => setTabContentInput(e.target.value)} rows={8} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setIsEditingTabs(false)} className="px-4 py-2 rounded border">Cancel</button>
+                              <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Save</button>
+                           </div>
+                        </form>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
+
+         {/* Backing Track Modal */}
+         <AnimatePresence>
+            {isEditingBacking && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto" onClick={() => setIsEditingBacking(false)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} className="w-full max-w-md z-10 pointer-events-auto relative">
+                     <GlassCard>
+                        <div className="flex justify-between items-center mb-4">
+                           <h3 className="text-lg font-medium">Edit Backing Track</h3>
+                           <button onClick={() => setIsEditingBacking(false)} className="text-gray-400"><X size={18} /></button>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); addSongResource(song.id, { backingTrackUrl: backingUrlInput }); setIsEditingBacking(false); }} className="space-y-4">
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Backing Track URL</label>
+                              <input value={backingUrlInput} onChange={e => setBackingUrlInput(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setIsEditingBacking(false)} className="px-4 py-2 rounded border">Cancel</button>
+                              <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Save</button>
+                           </div>
+                        </form>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
+
+         {/* Practice Log Modal */}
+         <AnimatePresence>
+            {isAddingPractice && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto" onClick={() => setIsAddingPractice(false)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} className="w-full max-w-md z-10 pointer-events-auto relative">
+                     <GlassCard>
+                        <div className="flex justify-between items-center mb-4">
+                           <h3 className="text-lg font-medium">Log Practice Session</h3>
+                           <button onClick={() => setIsAddingPractice(false)} className="text-gray-400"><X size={18} /></button>
+                        </div>
+                        <form onSubmit={async (e) => { e.preventDefault(); await addPracticeSession(song.id, practiceDuration, practiceNotes, practiceFile, practiceFile ? practiceFile.name : undefined); setIsAddingPractice(false); setPracticeFile(null); setPracticeNotes(''); setPracticeDuration(10); }} className="space-y-4">
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Notes</label>
+                              <textarea value={practiceNotes} onChange={e => setPracticeNotes(e.target.value)} rows={4} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Attach recording (optional)</label>
+                              <input type="file" accept="audio/*,video/*" onChange={e => {
+                                const file = e.target.files ? e.target.files[0] : null;
+                                setPracticeFile(file);
+                                // auto-detect duration for selected media
+                                if (file) {
+                                  try {
+                                    const isVideo = file.type.startsWith('video');
+                                    const mediaEl = document.createElement(isVideo ? 'video' : 'audio');
+                                    mediaEl.preload = 'metadata';
+                                    const objectUrl = URL.createObjectURL(file);
+                                    mediaEl.src = objectUrl;
+                                    mediaEl.onloadedmetadata = () => {
+                                      const seconds = (mediaEl.duration || 0);
+                                      const minutes = Math.max(1, Math.round(seconds / 60));
+                                      setPracticeDuration(minutes);
+                                      URL.revokeObjectURL(objectUrl);
+                                    };
+                                  } catch (err) {
+                                    // ignore detection errors and keep default duration
+                                  }
+                                }
+                              }} />
+                           </div>
+                           <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setIsAddingPractice(false)} className="px-4 py-2 rounded border">Cancel</button>
+                              <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Save</button>
+                           </div>
+                        </form>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
 
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
@@ -301,39 +446,104 @@ export const SongDetail: React.FC = () => {
            <GlassCard>
               <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide mb-4">Resources</h3>
               <div className="space-y-3">
-                 <button className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
+                 <button onClick={() => setIsEditingTabs(true)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
                     <div className="flex items-center gap-3">
                        <div className="p-2 bg-gray-100 text-gray-600 rounded-lg group-hover:bg-white group-hover:shadow-sm transition-all">
                           <ExternalLink size={16} />
                        </div>
-                       <span className="text-sm font-medium text-gray-700">Guitar Tabs</span>
+                       <div className="flex-1">
+                         <div className="text-sm font-medium text-gray-700">Guitar Tabs</div>
+                         <div className="text-xs text-gray-400">{song.tabUrl ? 'Link available' : (song.tabContent ? 'Inline tab' : 'No tabs')}</div>
+                       </div>
                     </div>
-                    <ArrowLeft size={14} className="rotate-180 text-gray-300 group-hover:text-gray-900 transition-colors" />
+                    <div className="flex items-center gap-2">
+                      {song.tabUrl && (
+                        <div onClick={(e) => { e.stopPropagation(); window.open(song.tabUrl, '_blank'); }} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white rounded transition-colors cursor-pointer">
+                          <LinkIcon size={14} />
+                        </div>
+                      )}
+                      <ArrowLeft size={14} className="rotate-180 text-gray-300 group-hover:text-gray-900 transition-colors" />
+                    </div>
                  </button>
 
-                 <button className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
+                 <button onClick={() => setIsEditingBacking(true)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
                     <div className="flex items-center gap-3">
                        <div className="p-2 bg-gray-100 text-gray-600 rounded-lg group-hover:bg-white group-hover:shadow-sm transition-all">
                           <Mic2 size={16} />
                        </div>
-                       <span className="text-sm font-medium text-gray-700">Backing Track</span>
+                       <div className="flex-1">
+                         <div className="text-sm font-medium text-gray-700">Backing Track</div>
+                         <div className="text-xs text-gray-400">{(song as any).backingTrackUrl ? 'Link available' : 'No backing track'}</div>
+                       </div>
                     </div>
-                    <ArrowLeft size={14} className="rotate-180 text-gray-300 group-hover:text-gray-900 transition-colors" />
+                    <div className="flex items-center gap-2">
+                      {(song as any).backingTrackUrl && (
+                        <div onClick={(e) => { e.stopPropagation(); window.open((song as any).backingTrackUrl, '_blank'); }} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white rounded transition-colors cursor-pointer">
+                          <LinkIcon size={14} />
+                        </div>
+                      )}
+                      <ArrowLeft size={14} className="rotate-180 text-gray-300 group-hover:text-gray-900 transition-colors" />
+                    </div>
                  </button>
 
-                 <button className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
+                 <button onClick={() => setIsAddingPractice(true)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors group border border-transparent hover:border-gray-100">
                     <div className="flex items-center gap-3">
                        <div className="p-2 bg-gray-100 text-gray-600 rounded-lg group-hover:bg-white group-hover:shadow-sm transition-all">
                           <Video size={16} />
                        </div>
-                       <span className="text-sm font-medium text-gray-700">Practice Log</span>
+                       <div>
+                         <div className="text-sm font-medium text-gray-700">Practice Log</div>
+                         <div className="text-xs text-gray-400">{getPracticeVideosForSong(song.id).length ?? 0} recordings</div>
+                       </div>
                     </div>
-                    <span className="text-xs text-gray-400">3 videos</span>
+                    <span className="text-xs text-gray-400">View</span>
                  </button>
+              </div>
+           </GlassCard>
+
+           {/* Practice Recordings */}
+           <GlassCard>
+              <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide mb-4">Practice Recordings</h3>
+              <div className="space-y-2">
+                {getPracticeVideosForSong(song.id).length === 0 && (
+                  <div className="text-xs text-gray-400">No recordings yet</div>
+                )}
+                {getPracticeVideosForSong(song.id).map(v => (
+                  <button key={v.id} onClick={() => setActiveVideo({ id: v.id, url: v.url, title: v.title })} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                    <div className="w-20 h-12 bg-black/5 rounded overflow-hidden flex items-center justify-center">
+                      <video src={v.url} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-800 truncate">{v.title}</div>
+                      <div className="text-xs text-gray-400">{v.recordedAt ? new Date(v.recordedAt).toLocaleString() : ''}</div>
+                    </div>
+                    <div className="text-xs text-gray-400">Play</div>
+                  </button>
+                ))}
               </div>
            </GlassCard>
         </div>
       </div>
+
+         {/* Video Player Modal */}
+         <AnimatePresence>
+            {activeVideo && (
+               <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 pointer-events-none">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={() => setActiveVideo(null)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="w-full max-w-3xl z-10 pointer-events-auto">
+                     <GlassCard>
+                        <div className="flex justify-between items-center mb-4">
+                           <h3 className="text-lg font-medium">{activeVideo.title}</h3>
+                           <button onClick={() => setActiveVideo(null)} className="text-gray-400"><X size={18} /></button>
+                        </div>
+                        <div>
+                           <video src={activeVideo.url} controls className="w-full rounded-lg bg-black" />
+                        </div>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
     </div>
   );
 };
