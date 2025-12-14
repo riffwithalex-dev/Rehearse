@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Project, Song, TonePreset } from '../types';
+import { Project, Song, TonePreset, PracticeSession } from '../types';
 import { MOCK_PROJECTS, MOCK_SONGS, MOCK_TONE_PRESETS } from '../constants';
 import { hasSupabase, getSupabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
+import { generateUUID } from '../lib/uuid';
 
 // Normalization functions: convert snake_case DB rows to camelCase app types
 function normalizeSong(row: any): Song {
@@ -48,16 +49,28 @@ function normalizeTonePreset(row: any): TonePreset {
   };
 }
 
+function normalizePracticeSession(row: any): PracticeSession {
+  return {
+    id: row.id,
+    date: new Date(row.session_date || row.created_at),
+    songId: row.song_id,
+    durationMinutes: row.duration_minutes,
+  };
+}
+
 interface DataContextType {
   projects: Project[];
   songs: Song[];
   tonePresets: TonePreset[];
   todaysScheduleIds: string[];
+  practiceSessions: { [songId: string]: PracticeSession[] };
   addProject: (project: Project) => void;
   addSong: (song: Song) => void;
   addTonePreset: (preset: TonePreset) => void;
   updateSong: (id: string, updates: Partial<Song>) => void;
   addToSchedule: (songId: string) => void;
+  addPracticeSession: (songId: string, durationMinutes: number, notes?: string) => void;
+  getPracticeSessionsForSong: (songId: string) => PracticeSession[];
   dbError?: string | null;
   clearDbError: () => void;
 }
@@ -69,18 +82,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
   const [songs, setSongs] = useState<Song[]>(MOCK_SONGS);
   const [tonePresets, setTonePresets] = useState<TonePreset[]>(MOCK_TONE_PRESETS);
-  // Initialize schedule with first 3 mock songs
   const [todaysScheduleIds, setTodaysScheduleIds] = useState<string[]>(MOCK_SONGS.slice(0, 3).map(s => s.id));
+  const [practiceSessions, setPracticeSessions] = useState<{ [songId: string]: PracticeSession[] }>({});
   const [dbError, setDbError] = useState<string | null>(null);
 
-  // If Supabase env vars are present, load data from Supabase and use it as the source of truth.
   useEffect(() => {
     if (!hasSupabase() || !user?.id) return;
     const supabase = getSupabase();
 
     async function load() {
       try {
-        // Filter projects by user_id
         const { data: pData, error: pErr } = await supabase
           .from('projects')
           .select('*')
@@ -90,7 +101,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setProjects(pData.map(normalizeProject));
         }
 
-        // Get songs from user's projects
         if (pData && pData.length > 0) {
           const projectIds = pData.map(p => p.id);
           const { data: sData, error: sErr } = await supabase
@@ -99,7 +109,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .in('project_id', projectIds);
           if (sErr) throw sErr;
           if (sData && sData.length > 0) {
-            // Load components for each song
             const songsWithComponents = await Promise.all(
               sData.map(async (song: any) => {
                 const { data: compData, error: compErr } = await supabase
@@ -113,7 +122,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // Filter tone presets by user_id
         const { data: tData, error: tErr } = await supabase
           .from('tone_presets')
           .select('*')
@@ -123,9 +131,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setTonePresets(tData.map(normalizeTonePreset));
         }
       } catch (e) {
-        // keep mock fallback
-        // store error for UI
-        // eslint-disable-next-line no-console
         console.error('Error loading data from Supabase:', e);
         setDbError((e as any)?.message ? String((e as any).message) : 'Error loading data from Supabase');
       }
@@ -147,11 +152,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             description: project.description ?? null,
             band_name: project.bandName ?? null,
           };
-          const { data, error } = await supabase.from('projects').insert(payload).select().single();
+          const { error } = await supabase.from('projects').insert(payload);
           if (error) throw error;
         } catch (error) {
-          // log and surface to UI
-          // eslint-disable-next-line no-console
           console.error('Supabase insert project error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting project');
         }
@@ -160,9 +163,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addSong = (song: Song) => {
-    // optimistic add
     setSongs(prev => [...prev, song]);
-    // Update the project's song count
     setProjects(prev => prev.map(p => 
       p.id === song.projectId ? { ...p, songCount: p.songCount + 1 } : p
     ));
@@ -190,7 +191,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const { data, error } = await supabase.from('songs').insert(payload).select().single();
           if (error) throw error;
           if (data) {
-            // Insert components for this song
             if (song.components && song.components.length > 0) {
               const componentPayloads = song.components.map(comp => ({
                 song_id: data.id,
@@ -202,12 +202,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               const { error: compErr } = await supabase.from('song_components').insert(componentPayloads);
               if (compErr) throw compErr;
             }
-            // update local state: replace temp id with DB id and merge any returned fields
             const normalized = normalizeSong({ ...data, components: song.components });
             setSongs(prev => prev.map(s => s.id === song.id ? normalized : s));
           }
         } catch (error) {
-          // eslint-disable-next-line no-console
           console.error('Supabase insert song error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting song');
         }
@@ -233,10 +231,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             style_tags: preset.tags ?? null,
             notes: (preset as any).notes ?? null,
           };
-          const { data, error } = await supabase.from('tone_presets').insert(payload).select().single();
+          const { error } = await supabase.from('tone_presets').insert(payload);
           if (error) throw error;
         } catch (error) {
-          // eslint-disable-next-line no-console
           console.error('Supabase insert tone_preset error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting tone preset');
         }
@@ -250,7 +247,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
       (async () => {
         try {
-          // If only components are being updated, update song_components instead
           if (updates.components && Object.keys(updates).length === 1) {
             const components = updates.components;
             for (const comp of components) {
@@ -264,7 +260,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           const payload: any = {};
-          // map camelCase to snake_case for known fields
           if (updates.projectId !== undefined) payload.project_id = updates.projectId;
           if (updates.bpm !== undefined) payload.tempo = updates.bpm;
           if (updates.tabUrl !== undefined) payload.tab_url = updates.tabUrl;
@@ -273,9 +268,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (updates.artist !== undefined) payload.artist = updates.artist;
           if (updates.difficulty !== undefined) payload.difficulty = updates.difficulty;
           if (updates.status !== undefined) payload.status = updates.status;
-            if (updates.tonePresetId !== undefined) payload.tone_preset_id = updates.tonePresetId;
+          if (updates.tonePresetId !== undefined) payload.tone_preset_id = updates.tonePresetId;
 
-          // Only call update if there are actual song fields to update
           if (Object.keys(payload).length > 0) {
             const { data, error } = await supabase.from('songs').update(payload).eq('id', id).select().single();
             if (error) throw error;
@@ -285,7 +279,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
           }
         } catch (error) {
-          // eslint-disable-next-line no-console
           console.error('Supabase update song error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error updating song');
         }
@@ -298,20 +291,55 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setTodaysScheduleIds(prev => [...prev, songId]);
       if (hasSupabase()) {
         const supabase = getSupabase();
-        // This app uses a practice_schedule table; insert a simple schedule for the current user.
         (async () => {
           try {
-            const payload: any = { song_id: songId, scheduled_date: new Date().toISOString().slice(0,10) };
-            const { data, error } = await supabase.from('practice_schedule').insert(payload).select().single();
+            const payload: any = { song_id: songId, scheduled_date: new Date().toISOString().slice(0,10), user_id: user?.id };
+            const { error } = await supabase.from('practice_schedule').insert(payload);
             if (error) throw error;
           } catch (error) {
-            // eslint-disable-next-line no-console
             console.error('Supabase insert practice_schedule error:', error);
             setDbError((error as any)?.message ? String((error as any).message) : 'Error adding to schedule');
           }
         })();
       }
     }
+  };
+
+  const addPracticeSession = (songId: string, durationMinutes: number, notes?: string) => {
+    const newSession: PracticeSession = {
+      id: generateUUID(),
+      date: new Date(),
+      songId,
+      durationMinutes,
+    };
+    setPracticeSessions(prev => ({
+      ...prev,
+      [songId]: [...(prev[songId] ?? []), newSession],
+    }));
+    if (hasSupabase()) {
+      const supabase = getSupabase();
+      (async () => {
+        try {
+          const payload: any = {
+            id: newSession.id,
+            song_id: songId,
+            user_id: user?.id,
+            duration_minutes: durationMinutes,
+            notes: notes ?? null,
+            session_date: new Date().toISOString().slice(0, 10),
+          };
+          const { error } = await supabase.from('practice_sessions').insert(payload);
+          if (error) throw error;
+        } catch (error) {
+          console.error('Supabase insert practice_session error:', error);
+          setDbError((error as any)?.message ? String((error as any).message) : 'Error logging practice session');
+        }
+      })();
+    }
+  };
+
+  const getPracticeSessionsForSong = (songId: string): PracticeSession[] => {
+    return practiceSessions[songId] ?? [];
   };
 
   const clearDbError = () => setDbError(null);
@@ -322,12 +350,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       songs,
       tonePresets,
       todaysScheduleIds,
+      practiceSessions,
       addProject,
       addSong,
       addTonePreset,
       updateSong,
-      addToSchedule
-      ,
+      addToSchedule,
+      addPracticeSession,
+      getPracticeSessionsForSong,
       dbError,
       clearDbError
     }}>

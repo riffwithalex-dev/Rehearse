@@ -466,3 +466,14 @@ For questions or issues, refer to:
 **Last Updated:** December 12, 2025  
 **Project Name:** Tribute Band Song Tracker  
 **Status:** MVP Ready
+TODOs
+
+Prioritized, actionable items to finish core functionality spotted during testing.
+
+- Fix Song Resources UI: enable adding/editing `tab_url`, `backing_track_url`, and `tab_content` from `pages/SongDetail.tsx` and persist to Supabase (`songs` table). Update form, handlers, and `DataContext` methods.
+- Add Practice Session Logging: implement UI and `DataContext` helper to create `practice_sessions` rows (duration, notes, session_date) and show session history on `SongDetail`.
+- Support Practice Videos: add form to link/upload `practice_videos` (title, url, component_id) and persist to DB; show videos list on `SongDetail`.
+- Expose resource helpers in `DataContext`: add `addSongResource`, `addPracticeSession`, `addPracticeVideo` and wire them into `pages/SongDetail.tsx`.
+- Audit ID generation: find and replace remaining timestamp-based IDs with `generateUUID()` (check `pages/`, `components/`, and `scripts/`).
+- Auth loading & UX: confirm `AuthContext.loading` is used throughout and that `SignIn`/`SignUp` pages don't render global chrome (sidebar/header). (`AuthContext.tsx`, `ProtectedRoute.tsx`, `App.tsx`)
+- Add QA checklist/tests: create a short manual QA checklist or basic unit/integration tests for sign-in, project/song persistence, and resource CRUD.
