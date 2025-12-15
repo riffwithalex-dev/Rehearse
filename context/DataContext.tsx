@@ -297,6 +297,48 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateTonePreset = (id: string, updates: Partial<TonePreset>) => {
+    setTonePresets(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    if (hasSupabase()) {
+      const supabase = getSupabase();
+      (async () => {
+        try {
+          const payload: any = {};
+          if (updates.name !== undefined) payload.name = updates.name;
+          if (updates.description !== undefined) payload.description = updates.description;
+          if (updates.guitarModel !== undefined) payload.guitar_model = updates.guitarModel;
+          if (updates.pickupPosition !== undefined) payload.pickup_position = updates.pickupPosition;
+          if (updates.ampSettings !== undefined) payload.amp_settings = updates.ampSettings;
+          if (updates.effects !== undefined) payload.effects_chain = updates.effects;
+          if (updates.tags !== undefined) payload.style_tags = updates.tags;
+          if (Object.keys(payload).length > 0) {
+            const { error } = await supabase.from('tone_presets').update(payload).eq('id', id);
+            if (error) throw error;
+          }
+        } catch (error) {
+          console.error('Supabase update tone_preset error:', error);
+          setDbError((error as any)?.message ? String((error as any).message) : 'Error updating tone preset');
+        }
+      })();
+    }
+  };
+
+  const deleteTonePreset = (id: string) => {
+    setTonePresets(prev => prev.filter(p => p.id !== id));
+    if (hasSupabase()) {
+      const supabase = getSupabase();
+      (async () => {
+        try {
+          const { error } = await supabase.from('tone_presets').delete().eq('id', id);
+          if (error) throw error;
+        } catch (error) {
+          console.error('Supabase delete tone_preset error:', error);
+          setDbError((error as any)?.message ? String((error as any).message) : 'Error deleting tone preset');
+        }
+      })();
+    }
+  };
+
   const updateSong = (id: string, updates: Partial<Song>) => {
     setSongs(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     if (hasSupabase()) {
@@ -325,6 +367,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (updates.difficulty !== undefined) payload.difficulty = updates.difficulty;
           if (updates.status !== undefined) payload.status = updates.status;
           if (updates.tonePresetId !== undefined) payload.tone_preset_id = updates.tonePresetId;
+          if (updates.key !== undefined) payload.key = updates.key;
 
           if (Object.keys(payload).length > 0) {
             const { data, error } = await supabase.from('songs').update(payload).eq('id', id).select().single();
@@ -578,6 +621,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       addProject,
       addSong,
       addTonePreset,
+      updateTonePreset,
+      deleteTonePreset,
       updateSong,
       addToSchedule,
       addToScheduleForDate,

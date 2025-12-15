@@ -27,6 +27,9 @@ export const SongDetail: React.FC = () => {
    const [practiceNotes, setPracticeNotes] = useState('');
    const [practiceFile, setPracticeFile] = useState<File | null>(null);
    const [activeVideo, setActiveVideo] = useState<{ id: string; url: string; title: string } | null>(null);
+   const [isEditingDetails, setIsEditingDetails] = useState(false);
+   const [bpmInput, setBpmInput] = useState(song?.bpm?.toString() ?? '');
+   const [keyInput, setKeyInput] = useState(song?.key ?? '');
 
    // Sync form state when song data changes (e.g. on page reload)
    useEffect(() => {
@@ -34,12 +37,14 @@ export const SongDetail: React.FC = () => {
        setTabUrlInput(song.tabUrl ?? '');
        setTabContentInput((song as any)?.tabContent ?? '');
        setBackingUrlInput((song as any)?.backingTrackUrl ?? '');
+       setBpmInput(song?.bpm?.toString() ?? '');
+       setKeyInput(song?.key ?? '');
      }
    }, [song]);
 
    // Prevent body scroll when modal is open
    useEffect(() => {
-     const isModalOpen = isEditingTabs || isEditingBacking || isAddingPractice || isSelectingPreset || activeVideo;
+     const isModalOpen = isEditingTabs || isEditingBacking || isAddingPractice || isSelectingPreset || activeVideo || isEditingDetails;
      if (isModalOpen) {
        document.documentElement.style.overflow = 'hidden';
      } else {
@@ -141,6 +146,42 @@ export const SongDetail: React.FC = () => {
             </motion.div>
           </div>
         )}
+         </AnimatePresence>
+
+         {/* Details Modal */}
+         <AnimatePresence>
+            {isEditingDetails && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto" onClick={() => setIsEditingDetails(false)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="w-full max-w-md z-10 pointer-events-auto relative">
+                     <GlassCard className="flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                           <div>
+                              <h3 className="text-xl font-light text-gray-900">Edit Details</h3>
+                              <p className="text-xs text-gray-500 mt-1">Update BPM and Key</p>
+                           </div>
+                           <button onClick={() => setIsEditingDetails(false)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-full transition-colors">
+                              <X size={20} />
+                           </button>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); updateSong(song.id, { bpm: bpmInput ? parseInt(bpmInput) : undefined, key: keyInput || undefined }); setIsEditingDetails(false); }} className="space-y-4">
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">BPM</label>
+                              <input value={bpmInput} onChange={e => setBpmInput(e.target.value)} type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div>
+                              <label className="block text-xs text-gray-500 mb-1">Key</label>
+                              <input value={keyInput} onChange={e => setKeyInput(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm" />
+                           </div>
+                           <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setIsEditingDetails(false)} className="px-4 py-2 rounded border">Cancel</button>
+                              <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Save</button>
+                           </div>
+                        </form>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
          </AnimatePresence>
 
          {/* Tabs Modal */}
@@ -419,7 +460,10 @@ export const SongDetail: React.FC = () => {
         <div className="space-y-6">
            {/* Details Card */}
            <GlassCard>
-              <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide mb-4">Details</h3>
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">Details</h3>
+                 <button onClick={() => setIsEditingDetails(true)} className="text-xs border border-gray-200 rounded px-3 py-1.5 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-all font-medium">Edit</button>
+              </div>
               <div className="space-y-4 text-sm">
                 <div className="flex justify-between py-2 border-b border-gray-50">
                    <span className="text-gray-500">Difficulty</span>
@@ -431,7 +475,7 @@ export const SongDetail: React.FC = () => {
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-50">
                    <span className="text-gray-500">Key</span>
-                   <span className="font-medium">Gm</span>
+                   <span className="font-medium">{song.key || '-'}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-50">
                    <span className="text-gray-500">Status</span>
@@ -547,3 +591,4 @@ export const SongDetail: React.FC = () => {
     </div>
   );
 };
+

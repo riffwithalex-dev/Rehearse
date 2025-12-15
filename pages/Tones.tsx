@@ -4,11 +4,11 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { Knob } from '../components/ui/Knob';
 import { Plus, Sliders, Zap, Tag, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { TonePreset } from '../types';
+import { TonePreset, EffectPedal } from '../types';
 import { generateUUID } from '../lib/uuid';
 
 export const Tones: React.FC = () => {
-  const { tonePresets: presets, addTonePreset } = useData();
+  const { tonePresets: presets, addTonePreset, updateTonePreset, deleteTonePreset } = useData();
   const [filter, setFilter] = useState('All');
   
   // Create Modal State
@@ -19,47 +19,78 @@ export const Tones: React.FC = () => {
   const [newDesc, setNewDesc] = useState('');
   const [newGuitar, setNewGuitar] = useState('');
   const [newPickup, setNewPickup] = useState('');
+  const [newAmp, setNewAmp] = useState({ gain: 5, bass: 5, mid: 5, treble: 5, reverb: 3, volume: 5 });
+  const [newEffects, setNewEffects] = useState<EffectPedal[]>([]);
+  const [newTags, setNewTags] = useState<string[]>(['Custom']);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<TonePreset | null>(null);
+  const [search, setSearch] = useState('');
 
   const allTags = Array.from(new Set(presets.flatMap(t => (t as any).tags ?? (t as any).style_tags ?? [])));
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newPreset: TonePreset = {
-      id: generateUUID(),
-      name: newName,
-      description: newDesc,
-      guitarModel: newGuitar,
-      pickupPosition: newPickup,
-      ampSettings: { gain: 5, bass: 5, mid: 5, treble: 5, reverb: 3, volume: 5 }, // Defaults
-      effects: [],
-      tags: ['Custom'],
-    };
-    addTonePreset(newPreset);
-    setIsCreating(false);
+  const handleEdit = (preset: TonePreset) => {
+    setEditingPreset(preset);
+    setNewName(preset.name);
+    setNewDesc(preset.description || '');
+    setNewGuitar(preset.guitarModel);
+    setNewPickup(preset.pickupPosition);
+    setNewAmp(preset.ampSettings);
+    setNewEffects(preset.effects);
+    setNewTags(preset.tags);
+    setIsEditing(true);
+  };
+
+  const resetForm = () => {
     setNewName('');
     setNewDesc('');
     setNewGuitar('');
     setNewPickup('');
+    setNewAmp({ gain: 5, bass: 5, mid: 5, treble: 5, reverb: 3, volume: 5 });
+    setNewEffects([]);
+    setNewTags(['Custom']);
+    setEditingPreset(null);
+  };
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const preset: TonePreset = {
+      id: isEditing && editingPreset ? editingPreset.id : generateUUID(),
+      name: newName,
+      description: newDesc,
+      guitarModel: newGuitar,
+      pickupPosition: newPickup,
+      ampSettings: newAmp,
+      effects: newEffects,
+      tags: newTags,
+    };
+    if (isEditing && editingPreset) {
+      updateTonePreset(editingPreset.id, preset);
+      setIsEditing(false);
+    } else {
+      addTonePreset(preset);
+      setIsCreating(false);
+    }
+    resetForm();
   };
 
   return (
     <div className="space-y-8 relative">
       <AnimatePresence>
-        {isCreating && (
+        {(isCreating || isEditing) && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm"
-              onClick={() => setIsCreating(false)}
+              onClick={() => { if (isCreating) setIsCreating(false); else if (isEditing) setIsEditing(false); }}
             />
             <motion.div
                initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-               className="w-full max-w-md z-10"
+               className="w-full max-w-2xl z-10"
             >
-               <GlassCard>
+               <GlassCard className="max-h-[80vh] overflow-y-auto">
                   <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-light text-gray-900">New Tone Preset</h3>
-                    <button onClick={() => setIsCreating(false)} className="text-gray-400 hover:text-gray-900"><X size={20} /></button>
+                    <h3 className="text-xl font-light text-gray-900">{isEditing ? 'Edit Tone Preset' : 'New Tone Preset'}</h3>
+                    <button onClick={() => { if (isCreating) setIsCreating(false); else if (isEditing) setIsEditing(false); }} className="text-gray-400 hover:text-gray-900"><X size={20} /></button>
                   </div>
                   <form onSubmit={handleCreate} className="space-y-4">
                     <div>
@@ -101,8 +132,76 @@ export const Tones: React.FC = () => {
                         />
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Amp Settings</label>
+                      <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl">
+                        <div className="flex flex-col items-center">
+                          <Knob label="Gain" value={newAmp.gain} onChange={v => setNewAmp({...newAmp, gain: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.gain} onChange={e => setNewAmp({...newAmp, gain: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Knob label="Bass" value={newAmp.bass} onChange={v => setNewAmp({...newAmp, bass: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.bass} onChange={e => setNewAmp({...newAmp, bass: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Knob label="Mid" value={newAmp.mid} onChange={v => setNewAmp({...newAmp, mid: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.mid} onChange={e => setNewAmp({...newAmp, mid: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Knob label="Treb" value={newAmp.treble} onChange={v => setNewAmp({...newAmp, treble: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.treble} onChange={e => setNewAmp({...newAmp, treble: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Knob label="Rev" value={newAmp.reverb} onChange={v => setNewAmp({...newAmp, reverb: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.reverb} onChange={e => setNewAmp({...newAmp, reverb: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <Knob label="Vol" value={newAmp.volume} onChange={v => setNewAmp({...newAmp, volume: v})} />
+                          <input type="range" min="0" max="10" value={newAmp.volume} onChange={e => setNewAmp({...newAmp, volume: +e.target.value})} className="w-full mt-2 accent-gray-900" />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">Effects</label>
+                      <div className="space-y-3">
+                        {newEffects.map((effect, idx) => (
+                          <div key={idx} className="border border-gray-200 rounded p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <label className="text-xs text-gray-500 w-12">Name:</label>
+                              <input value={effect.name} onChange={e => {
+                                const newEff = [...newEffects];
+                                newEff[idx].name = e.target.value;
+                                setNewEffects(newEff);
+                              }} className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm" />
+                            </div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <label className="text-xs text-gray-500 w-12">Type:</label>
+                              <input value={effect.type} onChange={e => {
+                                const newEff = [...newEffects];
+                                newEff[idx].type = e.target.value;
+                                setNewEffects(newEff);
+                              }} className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-gray-500 w-12">On:</label>
+                              <input type="checkbox" checked={effect.isOn} onChange={e => {
+                                const newEff = [...newEffects];
+                                newEff[idx].isOn = e.target.checked;
+                                setNewEffects(newEff);
+                              }} />
+                              <button onClick={() => setNewEffects(newEffects.filter((_, i) => i !== idx))} className="ml-auto p-1 bg-red-100 text-red-600 rounded hover:bg-red-200"><X size={14} /></button>
+                            </div>
+                          </div>
+                        ))}
+                        <button onClick={() => setNewEffects([...newEffects, { id: generateUUID(), name: '', type: '', isOn: true }])} className="text-xs text-gray-500 border border-gray-200 rounded px-3 py-1">Add Effect</button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Tags (comma separated)</label>
+                      <input value={newTags.join(', ')} onChange={e => setNewTags(e.target.value.split(',').map(s => s.trim()).filter(s => s))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gray-900 transition-colors" />
+                    </div>
                     <button type="submit" className="w-full bg-gray-900 text-white py-3 rounded-xl font-medium hover:bg-black transition-colors">
-                      Create Preset
+                      {isEditing ? 'Update Preset' : 'Create Preset'}
                     </button>
                   </form>
                </GlassCard>
@@ -123,6 +222,16 @@ export const Tones: React.FC = () => {
           <Plus size={16} /> New Preset
         </button>
       </header>
+
+      <div className="flex gap-4 mb-4">
+        <input
+          type="text"
+          placeholder="Search presets..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-gray-900 transition-colors"
+        />
+      </div>
 
       {/* Filter Chips */}
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
@@ -146,7 +255,9 @@ export const Tones: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {presets.filter(t => {
           const tags = (t as any).tags ?? (t as any).style_tags ?? [];
-          return filter === 'All' || tags.includes(filter);
+          const matchesFilter = filter === 'All' || tags.includes(filter);
+          const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) || (t.description || '').toLowerCase().includes(search.toLowerCase());
+          return matchesFilter && matchesSearch;
         }).map((preset, idx) => {
           const amp = (preset as any).ampSettings ?? (preset as any).amp_settings ?? { gain: 5, bass: 5, mid: 5, treble: 5, reverb: 3, volume: 5 };
           const effects = (preset as any).effects ?? (preset as any).effects_chain ?? [];
@@ -166,8 +277,13 @@ export const Tones: React.FC = () => {
                       )}
                    </div>
                 </div>
-                <div className="p-2 bg-gray-50 rounded-xl text-gray-400 group-hover:text-gray-900 transition-colors">
-                   <Sliders size={20} />
+                <div className="flex gap-2">
+                  <button onClick={() => handleEdit(preset)} className="p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-gray-900 transition-colors">
+                    <Sliders size={16} />
+                  </button>
+                  <button onClick={() => deleteTonePreset(preset.id)} className="p-2 bg-gray-50 rounded-xl text-red-400 hover:text-red-900 transition-colors">
+                    <X size={16} />
+                  </button>
                 </div>
              </div>
 

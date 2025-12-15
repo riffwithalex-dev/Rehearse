@@ -47,6 +47,7 @@ export interface Song {
   lastPlayed?: Date;
   duration?: string;
   bpm?: number;
+  key?: string;
   tabUrl?: string;
   tabContent?: string;
   backingTrackUrl?: string;
