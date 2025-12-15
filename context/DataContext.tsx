@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { Project, Song, TonePreset, PracticeSession } from '../types';
+import { Project, Song, TonePreset, PracticeSession, SongComponent } from '../types';
 import { PracticeVideo } from '../types';
 import { MOCK_PROJECTS, MOCK_SONGS, MOCK_TONE_PRESETS } from '../constants';
 import { hasSupabase, getSupabase } from '../lib/supabaseClient';
@@ -64,27 +64,28 @@ function normalizePracticeSession(row: any): PracticeSession {
 }
 
 interface DataContextType {
-   projects: Project[];
-   songs: Song[];
-   tonePresets: TonePreset[];
-   todaysScheduleIds: string[];
-   scheduledSongs: { [date: string]: Array<{ songId: string, completed: boolean, notes?: string }> };
-   practiceSessions: { [songId: string]: PracticeSession[] };
-   practiceVideos: { [songId: string]: PracticeVideo[] };
-   addProject: (project: Project) => void;
-   addSong: (song: Song) => void;
-   addTonePreset: (preset: TonePreset) => void;
-   updateSong: (id: string, updates: Partial<Song>) => void;
-   addToSchedule: (songId: string) => void;
-   addToScheduleForDate: (songId: string, date: string, notes?: string) => void;
-   removeFromSchedule: (songId: string, date: string) => void;
-   updateScheduleItem: (songId: string, date: string, updates: { completed?: boolean, notes?: string }) => void;
-   addPracticeSession: (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => void;
-   addSongResource: (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => void;
-   getPracticeSessionsForSong: (songId: string) => PracticeSession[];
-   getPracticeVideosForSong: (songId: string) => PracticeVideo[];
-   dbError?: string | null;
-   clearDbError: () => void;
+    projects: Project[];
+    songs: Song[];
+    tonePresets: TonePreset[];
+    todaysScheduleIds: string[];
+    scheduledSongs: { [date: string]: Array<{ songId: string, completed: boolean, notes?: string }> };
+    practiceSessions: { [songId: string]: PracticeSession[] };
+    practiceVideos: { [songId: string]: PracticeVideo[] };
+    addProject: (project: Project) => void;
+    addSong: (song: Song) => void;
+    addTonePreset: (preset: TonePreset) => void;
+    updateSong: (id: string, updates: Partial<Song>) => void;
+    addSongComponent: (songId: string, component: SongComponent) => void;
+    addToSchedule: (songId: string) => void;
+    addToScheduleForDate: (songId: string, date: string, notes?: string) => void;
+    removeFromSchedule: (songId: string, date: string) => void;
+    updateScheduleItem: (songId: string, date: string, updates: { completed?: boolean, notes?: string }) => void;
+    addPracticeSession: (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => void;
+    addSongResource: (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => void;
+    getPracticeSessionsForSong: (songId: string) => PracticeSession[];
+    getPracticeVideosForSong: (songId: string) => PracticeVideo[];
+    dbError?: string | null;
+    clearDbError: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -156,6 +157,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   grouped[pv.songId].push(pv);
                 });
                 setPracticeVideos(prev => ({ ...prev, ...grouped }));
+              }
+
+              // Load practice sessions for these songs
+              const { data: sessData, error: sessErr } = await supabase
+                .from('practice_sessions')
+                .select('*')
+                .in('song_id', songIds);
+              if (!sessErr && sessData && sessData.length > 0) {
+                const grouped: { [songId: string]: PracticeSession[] } = {};
+                sessData.forEach((s: any) => {
+                  const ps: PracticeSession = normalizePracticeSession(s);
+                  grouped[ps.songId] = grouped[ps.songId] ?? [];
+                  grouped[ps.songId].push(ps);
+                });
+                setPracticeSessions(prev => ({ ...prev, ...grouped }));
               }
             }
           }
@@ -345,16 +361,15 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const supabase = getSupabase();
       (async () => {
         try {
-          if (updates.components && Object.keys(updates).length === 1) {
-            const components = updates.components;
-            for (const comp of components) {
+          // Handle components update
+          if (updates.components) {
+            for (const comp of updates.components) {
               const { error: compErr } = await supabase
                 .from('song_components')
                 .update({ progress: comp.progress })
                 .eq('id', comp.id);
               if (compErr) throw compErr;
             }
-            return;
           }
 
           const payload: any = {};
@@ -380,6 +395,30 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch (error) {
           console.error('Supabase update song error:', error);
           setDbError((error as any)?.message ? String((error as any).message) : 'Error updating song');
+        }
+      })();
+    }
+  };
+
+  const addSongComponent = (songId: string, component: SongComponent) => {
+    setSongs(prev => prev.map(s => s.id === songId ? { ...s, components: [...s.components, component] } : s));
+    if (hasSupabase()) {
+      const supabase = getSupabase();
+      (async () => {
+        try {
+          const payload = {
+            id: component.id,
+            song_id: songId,
+            name: component.name,
+            type: component.type,
+            progress: component.progress ?? 0,
+            notes: (component as any).notes ?? null,
+          };
+          const { error } = await supabase.from('song_components').insert(payload);
+          if (error) throw error;
+        } catch (error) {
+          console.error('Supabase insert song_component error:', error);
+          setDbError((error as any)?.message ? String((error as any).message) : 'Error adding song component');
         }
       })();
     }
@@ -624,6 +663,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateTonePreset,
       deleteTonePreset,
       updateSong,
+      addSongComponent,
       addToSchedule,
       addToScheduleForDate,
       removeFromSchedule,

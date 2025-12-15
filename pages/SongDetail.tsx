@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { generateUUID } from '../lib/uuid';
+import { SongStatus } from '../types';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Knob } from '../components/ui/Knob';
 import { ArrowLeft, Play, ExternalLink, MoreHorizontal, Video, Mic2, Sliders, Zap, X, Check, Link as LinkIcon } from 'lucide-react';
@@ -9,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export const SongDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-   const { songs, updateSong, tonePresets, addSongResource, addPracticeSession, getPracticeVideosForSong } = useData();
+   const { songs, updateSong, tonePresets, addSongResource, addPracticeSession, getPracticeVideosForSong, addSongComponent } = useData();
   
   const song = songs.find(s => s.id === id);
   
@@ -30,6 +32,9 @@ export const SongDetail: React.FC = () => {
    const [isEditingDetails, setIsEditingDetails] = useState(false);
    const [bpmInput, setBpmInput] = useState(song?.bpm?.toString() ?? '');
    const [keyInput, setKeyInput] = useState(song?.key ?? '');
+   const [isAddingComponent, setIsAddingComponent] = useState(false);
+   const [newComponentType, setNewComponentType] = useState<'Intro' | 'Verse' | 'Chorus' | 'Bridge' | 'Solo' | 'Outro' | 'Rhythm' | 'Lead' | 'Custom'>('Verse');
+   const [newComponentName, setNewComponentName] = useState('');
 
    // Sync form state when song data changes (e.g. on page reload)
    useEffect(() => {
@@ -44,7 +49,7 @@ export const SongDetail: React.FC = () => {
 
    // Prevent body scroll when modal is open
    useEffect(() => {
-     const isModalOpen = isEditingTabs || isEditingBacking || isAddingPractice || isSelectingPreset || activeVideo || isEditingDetails;
+     const isModalOpen = isEditingTabs || isEditingBacking || isAddingPractice || isSelectingPreset || activeVideo || isEditingDetails || isAddingComponent;
      if (isModalOpen) {
        document.documentElement.style.overflow = 'hidden';
      } else {
@@ -53,17 +58,27 @@ export const SongDetail: React.FC = () => {
      return () => {
        document.documentElement.style.overflow = '';
      };
-   }, [isEditingTabs, isEditingBacking, isAddingPractice, isSelectingPreset, activeVideo]);
+   }, [isEditingTabs, isEditingBacking, isAddingPractice, isSelectingPreset, activeVideo, isEditingDetails, isAddingComponent]);
 
    if (!song) return <div className="p-8 text-center text-gray-500">Song not found</div>;
 
   const tonePreset = tonePresets.find(t => t.id === song.tonePresetId);
 
   const handleUpdateProgress = (componentId: string, newProgress: number) => {
-    const updatedComponents = song.components.map(c => 
+    const updatedComponents = song.components.map(c =>
       c.id === componentId ? { ...c, progress: newProgress } : c
     );
-    updateSong(song.id, { components: updatedComponents });
+    // Determine status based on progress
+    const coreComponents = updatedComponents.filter(c => ['Intro', 'Verse', 'Chorus'].includes(c.type));
+    let newStatus: SongStatus;
+    if (coreComponents.length > 0 && coreComponents.every(c => c.progress === 100)) {
+      newStatus = 'Performance Ready';
+    } else if (updatedComponents.some(c => c.progress > 0)) {
+      newStatus = 'In Progress';
+    } else {
+      newStatus = 'Not Started';
+    }
+    updateSong(song.id, { components: updatedComponents, status: newStatus });
   };
 
   const handleSelectPreset = (presetId: string) => {
@@ -176,6 +191,52 @@ export const SongDetail: React.FC = () => {
                            <div className="flex justify-end gap-2">
                               <button type="button" onClick={() => setIsEditingDetails(false)} className="px-4 py-2 rounded border">Cancel</button>
                               <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Save</button>
+                           </div>
+                        </form>
+                     </GlassCard>
+                  </motion.div>
+               </div>
+            )}
+         </AnimatePresence>
+
+         {/* Add Component Modal */}
+         <AnimatePresence>
+            {isAddingComponent && (
+               <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm pointer-events-auto" onClick={() => setIsAddingComponent(false)} />
+                  <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="w-full max-w-md z-10 pointer-events-auto relative">
+                     <GlassCard className="flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                           <div>
+                              <h3 className="text-xl font-light text-gray-900">Add Song Section</h3>
+                              <p className="text-xs text-gray-500 mt-1">Add a new section to track progress</p>
+                           </div>
+                           <button onClick={() => setIsAddingComponent(false)} className="text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-50 rounded-full transition-colors">
+                              <X size={20} />
+                           </button>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); addSongComponent(song.id, { id: generateUUID(), name: newComponentName || newComponentType, type: newComponentType, progress: 0 }); setIsAddingComponent(false); setNewComponentName(''); setNewComponentType('Verse'); }} className="space-y-4">
+                           <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Section Type</label>
+                              <select value={newComponentType} onChange={e => setNewComponentType(e.target.value as any)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gray-900 transition-colors">
+                                <option value="Intro">Intro</option>
+                                <option value="Verse">Verse</option>
+                                <option value="Chorus">Chorus</option>
+                                <option value="Bridge">Bridge</option>
+                                <option value="Solo">Solo</option>
+                                <option value="Outro">Outro</option>
+                                <option value="Rhythm">Rhythm</option>
+                                <option value="Lead">Lead</option>
+                                <option value="Custom">Custom</option>
+                              </select>
+                           </div>
+                           <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Section Name (optional)</label>
+                              <input value={newComponentName} onChange={e => setNewComponentName(e.target.value)} placeholder="e.g. Verse 1, Guitar Solo" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gray-900 transition-colors" />
+                           </div>
+                           <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setIsAddingComponent(false)} className="px-4 py-2 rounded border">Cancel</button>
+                              <button type="submit" className="px-4 py-2 rounded bg-gray-900 text-white">Add Section</button>
                            </div>
                         </form>
                      </GlassCard>
@@ -374,6 +435,13 @@ export const SongDetail: React.FC = () => {
                    </div>
                  </GlassCard>
                ))}
+
+               <button
+                 onClick={() => setIsAddingComponent(true)}
+                 className="w-full py-4 border-2 border-dashed border-gray-200 rounded-3xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all font-medium text-sm"
+               >
+                 + Add Section
+               </button>
              </motion.div>
            )}
 

@@ -2,15 +2,15 @@ import React from 'react';
 import { useData } from '../context/DataContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { SongCard } from '../components/SongCard';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Activity, CalendarDays, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { songs, projects, todaysScheduleIds } = useData();
+  const { songs, projects, todaysScheduleIds, practiceSessions } = useData();
   
-  const needsWorkSongs = songs.filter(s => s.status === 'Needs Work' || (s.lastPlayed && new Date(s.lastPlayed).getTime() < Date.now() - 1000 * 60 * 60 * 24 * 7));
+  const needsWorkSongs = songs.filter(s => s.status === 'In Progress' || (s.lastPlayed && new Date(s.lastPlayed).getTime() < Date.now() - 1000 * 60 * 60 * 24 * 7));
   const scheduledCount = todaysScheduleIds.length;
   
   // Calculate stats
@@ -28,13 +28,13 @@ export const Dashboard: React.FC = () => {
         >
           Good afternoon, <span className="font-medium">Alex</span>
         </motion.h1>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.1 }}
           className="text-gray-500 font-light"
         >
-          You have {scheduledCount} songs scheduled for today.
+          You have {scheduledCount} songs scheduled for today. <Link to="/schedule" className="text-gray-500 hover:text-gray-700 font-light underline ml-1">View Schedule</Link>
         </motion.p>
       </header>
 

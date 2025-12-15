@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Calendar, ChevronLeft, ChevronRight, Check, Plus, X, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -206,6 +207,9 @@ export const Schedule: React.FC = () => {
                         placeholder="Add notes..."
                         className="flex-1 bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-gray-900"
                       />
+                   </div>
+                   <div className="mt-2">
+                      <Link to={`/song/${song.songId}`} className="text-xs text-gray-500 hover:text-gray-700 underline">View Song Details</Link>
                    </div>
                 </GlassCard>
               ))
