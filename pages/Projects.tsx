@@ -5,7 +5,22 @@ import { SongCard } from '../components/SongCard';
 import { useNavigate } from 'react-router-dom';
 import { generateUUID } from '../lib/uuid';
 import { Plus, LayoutGrid, List, X } from 'lucide-react';
-import { Reorder, AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { Project, Song, Difficulty, SongStatus } from '../types';
 
 export const Projects: React.FC = () => {
@@ -14,6 +29,16 @@ export const Projects: React.FC = () => {
   
   const [activeProject, setActiveProject] = useState(projects[0]?.id || '');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Drag and drop state for list view - separate order for each project
+  const [songOrders, setSongOrders] = useState<{ [projectId: string]: string[] }>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
   
   // Modal States
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -82,8 +107,38 @@ export const Projects: React.FC = () => {
     setNewSongStatus('Not Started');
   };
 
+  // Get current project's song order
+  const getCurrentSongOrder = () => {
+    return songOrders[activeProject] || null;
+  };
+
+  // Handle drag end events for song reordering
+  const handleSongDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over) return;
+
+    if (active.id !== over.id) {
+      setSongOrders((prev) => {
+        const currentOrder = prev[activeProject] || songs.map(s => s.id);
+        const oldIndex = currentOrder.indexOf(active.id as string);
+        const newIndex = currentOrder.indexOf(over.id as string);
+        const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
+        return {
+          ...prev,
+          [activeProject]: newOrder
+        };
+      });
+    }
+  };
+
   return (
-    <div className="space-y-8 h-full relative">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleSongDragEnd}
+    >
+      <div className="space-y-8 h-full relative">
       {/* Create Project Modal */}
       <AnimatePresence>
         {isCreatingProject && (
@@ -316,33 +371,36 @@ export const Projects: React.FC = () => {
                </GlassCard>
              </div>
            ) : (
-             <Reorder.Group 
-               axis="y" 
-               values={songs} 
-               onReorder={() => {}} // No-op for mock
-               className="space-y-3"
+             <SortableContext
+               items={getCurrentSongOrder() || songs.map(s => s.id)}
+               strategy={verticalListSortingStrategy}
              >
-               {songs.map((song) => (
-                 <Reorder.Item key={song.id} value={song}>
-                   <SongCard 
-                    song={song} 
-                    viewMode="list"
-                    onClick={(id) => navigate(`/song/${id}`)} 
+               <div className="space-y-3">
+                 {(getCurrentSongOrder()
+                   ? getCurrentSongOrder()!.map(id => songs.find(s => s.id === id)).filter(Boolean)
+                   : songs
+                 ).map((song) => (
+                   <SongCard
+                     key={song!.id}
+                     song={song!}
+                     viewMode="list"
+                     onClick={(id) => navigate(`/song/${id}`)}
                    />
-                 </Reorder.Item>
-               ))}
-                <div className="pt-2">
-                   <button 
+                 ))}
+                 <div className="pt-2">
+                   <button
                      onClick={() => setIsCreatingSong(true)}
                      className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-all font-medium text-sm flex items-center justify-center gap-2"
                    >
                       <Plus size={16} /> Add New Song
                    </button>
-                </div>
-             </Reorder.Group>
+                 </div>
+               </div>
+             </SortableContext>
            )}
-        </div>
-      )}
-    </div>
-  );
+       </div>
+     )}
+     </div>
+   </DndContext>
+ );
 };

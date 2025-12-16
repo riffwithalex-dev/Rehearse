@@ -4,12 +4,37 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { Calendar, ChevronLeft, ChevronRight, Check, Plus, X, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const Schedule: React.FC = () => {
    const today = new Date();
    const { songs, scheduledSongs, addToScheduleForDate, removeFromSchedule, updateScheduleItem } = useData();
+
+   // Drag and drop state
+   const [sessionOrder, setSessionOrder] = useState<string[]>([]);
+
+   const sensors = useSensors(
+     useSensor(PointerSensor),
+     useSensor(KeyboardSensor, {
+       coordinateGetter: sortableKeyboardCoordinates,
+     })
+   );
 
    // Local State
    const [selectedDate, setSelectedDate] = useState(new Date());
@@ -54,8 +79,28 @@ export const Schedule: React.FC = () => {
     updateScheduleItem(songId, selectedDateStr, { notes });
   };
 
-  return (
-    <div className="space-y-8 relative">
+  // Handle drag end events for session reordering
+  const handleSessionDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over) return;
+
+    if (active.id !== over.id) {
+      setSessionOrder((items) => {
+        const oldIndex = items.indexOf(active.id as string);
+        const newIndex = items.indexOf(over.id as string);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+ return (
+   <DndContext
+     sensors={sensors}
+     collisionDetection={closestCenter}
+     onDragEnd={handleSessionDragEnd}
+   >
+     <div className="space-y-8 relative">
        {/* Schedule Modal */}
        <AnimatePresence>
         {isScheduling && (
@@ -169,30 +214,36 @@ export const Schedule: React.FC = () => {
               {selectedDate.toDateString() === today.toDateString() ? "Today's Session" : `Session for ${selectedDate.toLocaleDateString()}`}
             </h2>
 
-            {sessionSongs.length > 0 ? (
-              sessionSongs.map((song, i) => (
-                <GlassCard key={song.songId} delay={0.2 + (i * 0.1)} className="p-4">
+            <SortableContext
+              items={sessionOrder.length > 0 ? sessionOrder : sessionSongs.map(s => s.songId)}
+              strategy={verticalListSortingStrategy}
+            >
+              {(sessionOrder.length > 0
+                ? sessionOrder.map(id => sessionSongs.find(s => s.songId === id)).filter(Boolean)
+                : sessionSongs
+              ).map((song, i) => (
+                <GlassCard key={song!.songId} delay={0.2 + (i * 0.1)} className="p-4">
                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-4">
                          <button
-                           onClick={() => handleToggleCompleted(song.songId, !song.completed)}
+                           onClick={() => handleToggleCompleted(song!.songId, !song!.completed)}
                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                             song.completed ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 hover:border-gray-900'
+                             song!.completed ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 hover:border-gray-900'
                            }`}
                          >
-                            {song.completed && <Check size={14} />}
+                            {song!.completed && <Check size={14} />}
                          </button>
                          <div>
-                            <h3 className={`font-medium ${song.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{song.title}</h3>
-                            <p className="text-sm text-gray-500 font-light">Focus: {song.notes || 'General'}</p>
+                            <h3 className={`font-medium ${song!.completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{song!.title}</h3>
+                            <p className="text-sm text-gray-500 font-light">Focus: {song!.notes || 'General'}</p>
                          </div>
                       </div>
                       <div className="flex items-center gap-2">
                          <div className="px-3 py-1 bg-gray-50 rounded-lg text-xs font-medium text-gray-500 border border-gray-100">
-                            {song.difficulty}
+                            {song!.difficulty}
                          </div>
                          <button
-                           onClick={() => handleRemoveSong(song.songId)}
+                           onClick={() => handleRemoveSong(song!.songId)}
                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                          >
                             <Trash2 size={16} />
@@ -202,22 +253,23 @@ export const Schedule: React.FC = () => {
                    <div className="flex items-center gap-2">
                       <label className="text-xs text-gray-500">Notes:</label>
                       <input
-                        value={song.notes}
-                        onChange={e => handleUpdateNotes(song.songId, e.target.value)}
+                        value={song!.notes}
+                        onChange={e => handleUpdateNotes(song!.songId, e.target.value)}
                         placeholder="Add notes..."
                         className="flex-1 bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-gray-900"
                       />
                    </div>
                    <div className="mt-2">
-                      <Link to={`/song/${song.songId}`} className="text-xs text-gray-500 hover:text-gray-700 underline">View Song Details</Link>
+                      <Link to={`/song/${song!.songId}`} className="text-xs text-gray-500 hover:text-gray-700 underline">View Song Details</Link>
                    </div>
                 </GlassCard>
-              ))
-            ) : (
-              <div className="py-12 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-3xl">
-                 <p className="mb-4">No songs scheduled for this date.</p>
-              </div>
-            )}
+              ))}
+              {sessionSongs.length === 0 && (
+                <div className="py-12 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-3xl">
+                   <p className="mb-4">No songs scheduled for this date.</p>
+                </div>
+              )}
+            </SortableContext>
 
             <button
               onClick={() => setIsScheduling(true)}
@@ -252,7 +304,8 @@ export const Schedule: React.FC = () => {
               <p className="text-center text-xs text-gray-500 mt-4">Last 7 days activity</p>
            </GlassCard>
          </div>
-      </div>
-    </div>
-  );
-};
+       </div>
+       </div>
+     </DndContext>
+   );
+ };

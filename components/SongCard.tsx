@@ -2,12 +2,16 @@ import React from 'react';
 import { Song } from '../types';
 import { GlassCard } from './ui/GlassCard';
 import { PlayCircle, AlertCircle, CheckCircle2, Music2, Clock, GripVertical } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface SongCardProps {
   song: Song;
   onClick: (id: string) => void;
   index?: number;
   viewMode?: 'grid' | 'list';
+  draggable?: boolean;
+  data?: any;
 }
 
 const getStatusColor = (status: string) => {
@@ -27,7 +31,25 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, viewMode = 'grid' }) => {
+export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, viewMode = 'grid', draggable = false, data }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: song.id,
+    data: data || { type: 'song' }
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   // Calculate total progress
   const totalProgress = Math.round(
     song.components.reduce((acc, curr) => acc + curr.progress, 0) / (song.components.length || 1)
@@ -35,14 +57,15 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, vi
 
   if (viewMode === 'list') {
     return (
-      <GlassCard 
-        onClick={() => onClick(song.id)} 
-        delay={0} // Disable delay for list reordering performance
-        className="group relative overflow-hidden flex items-center gap-4 p-4 hover:shadow-md transition-all active:scale-[0.99]"
-      >
-        <div className="text-gray-300 cursor-grab active:cursor-grabbing hover:text-gray-500">
-          <GripVertical size={20} />
-        </div>
+      <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+        <GlassCard
+          onClick={() => onClick(song.id)}
+          delay={0} // Disable delay for list reordering performance
+          className="group relative overflow-hidden flex items-center gap-4 p-4 hover:shadow-md transition-all active:scale-[0.99]"
+        >
+          <div className="text-gray-300 cursor-grab active:cursor-grabbing hover:text-gray-500">
+            <GripVertical size={20} />
+          </div>
 
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-medium text-gray-900 tracking-tight truncate">
@@ -78,12 +101,14 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, vi
 
         {/* Hover Gradient Overlay */}
         <div className="absolute top-0 right-0 w-20 h-full bg-gradient-to-l from-white/50 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" />
-      </GlassCard>
+        </GlassCard>
+      </div>
     );
   }
 
   return (
-    <GlassCard onClick={() => onClick(song.id)} delay={index * 0.05} className="group relative overflow-hidden h-full flex flex-col justify-between">
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <GlassCard onClick={() => onClick(song.id)} delay={index * 0.05} className="group relative overflow-hidden h-full flex flex-col justify-between">
       <div>
         <div className="flex justify-between items-start mb-4">
             <div>
@@ -139,6 +164,7 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, vi
         </div>
       
       <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-gray-100/50 to-transparent rounded-bl-full -mr-10 -mt-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-    </GlassCard>
+      </GlassCard>
+    </div>
   );
 };
