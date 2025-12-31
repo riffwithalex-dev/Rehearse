@@ -64,28 +64,30 @@ function normalizePracticeSession(row: any): PracticeSession {
 }
 
 interface DataContextType {
-    projects: Project[];
-    songs: Song[];
-    tonePresets: TonePreset[];
-    todaysScheduleIds: string[];
-    scheduledSongs: { [date: string]: Array<{ songId: string, completed: boolean, notes?: string }> };
-    practiceSessions: { [songId: string]: PracticeSession[] };
-    practiceVideos: { [songId: string]: PracticeVideo[] };
-    addProject: (project: Project) => void;
-    addSong: (song: Song) => void;
-    addTonePreset: (preset: TonePreset) => void;
-    updateSong: (id: string, updates: Partial<Song>) => void;
-    addSongComponent: (songId: string, component: SongComponent) => void;
-    addToSchedule: (songId: string) => void;
-    addToScheduleForDate: (songId: string, date: string, notes?: string) => void;
-    removeFromSchedule: (songId: string, date: string) => void;
-    updateScheduleItem: (songId: string, date: string, updates: { completed?: boolean, notes?: string }) => void;
-    addPracticeSession: (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => void;
-    addSongResource: (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => void;
-    getPracticeSessionsForSong: (songId: string) => PracticeSession[];
-    getPracticeVideosForSong: (songId: string) => PracticeVideo[];
-    dbError?: string | null;
-    clearDbError: () => void;
+     projects: Project[];
+     songs: Song[];
+     tonePresets: TonePreset[];
+     todaysScheduleIds: string[];
+     scheduledSongs: { [date: string]: Array<{ songId: string, completed: boolean, notes?: string }> };
+     practiceSessions: { [songId: string]: PracticeSession[] };
+     practiceVideos: { [songId: string]: PracticeVideo[] };
+     addProject: (project: Project) => void;
+     removeProject: (id: string) => void;
+     addSong: (song: Song) => void;
+     removeSong: (id: string) => void;
+     addTonePreset: (preset: TonePreset) => void;
+     updateSong: (id: string, updates: Partial<Song>) => void;
+     addSongComponent: (songId: string, component: SongComponent) => void;
+     addToSchedule: (songId: string) => void;
+     addToScheduleForDate: (songId: string, date: string, notes?: string) => void;
+     removeFromSchedule: (songId: string, date: string) => void;
+     updateScheduleItem: (songId: string, date: string, updates: { completed?: boolean, notes?: string }) => void;
+     addPracticeSession: (songId: string, durationMinutes: number, notes?: string, mediaFile?: File | null, mediaTitle?: string) => void;
+     addSongResource: (songId: string, resources: { tabUrl?: string; backingTrackUrl?: string; tabContent?: string }) => void;
+     getPracticeSessionsForSong: (songId: string) => PracticeSession[];
+     getPracticeVideosForSong: (songId: string) => PracticeVideo[];
+     dbError?: string | null;
+     clearDbError: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -212,78 +214,151 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [user?.id]);
 
   const addProject = (project: Project) => {
-    setProjects(prev => [...prev, project]);
-    if (hasSupabase()) {
-      const supabase = getSupabase();
-      (async () => {
-        try {
-          const payload = {
-            id: project.id,
-            user_id: user?.id ?? null,
-            name: project.name,
-            description: project.description ?? null,
-            band_name: project.bandName ?? null,
-          };
-          const { error } = await supabase.from('projects').insert(payload);
-          if (error) throw error;
-        } catch (error) {
-          console.error('Supabase insert project error:', error);
-          setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting project');
-        }
-      })();
-    }
-  };
+     setProjects(prev => [...prev, project]);
+     if (hasSupabase()) {
+       const supabase = getSupabase();
+       (async () => {
+         try {
+           const payload = {
+             id: project.id,
+             user_id: user?.id ?? null,
+             name: project.name,
+             description: project.description ?? null,
+             band_name: project.bandName ?? null,
+           };
+           const { error } = await supabase.from('projects').insert(payload);
+           if (error) throw error;
+         } catch (error) {
+           console.error('Supabase insert project error:', error);
+           setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting project');
+         }
+       })();
+     }
+   };
+
+   const removeProject = (id: string) => {
+     setProjects(prev => prev.filter(p => p.id !== id));
+     setSongs(prev => prev.filter(s => s.projectId !== id));
+     // Remove from scheduled songs
+     setScheduledSongs(prev => {
+       const newPrev = { ...prev };
+       Object.keys(newPrev).forEach(date => {
+         newPrev[date] = newPrev[date].filter(s => songs.find(song => song.id === s.songId)?.projectId !== id);
+       });
+       return newPrev;
+     });
+     setTodaysScheduleIds(prev => prev.filter(songId => songs.find(s => s.id === songId)?.projectId !== id));
+     if (hasSupabase()) {
+       const supabase = getSupabase();
+       (async () => {
+         try {
+           // Delete songs first
+           const { error: songErr } = await supabase.from('songs').delete().eq('project_id', id);
+           if (songErr) throw songErr;
+           // Delete project
+           const { error } = await supabase.from('projects').delete().eq('id', id);
+           if (error) throw error;
+         } catch (error) {
+           console.error('Supabase delete project error:', error);
+           setDbError((error as any)?.message ? String((error as any).message) : 'Error deleting project');
+         }
+       })();
+     }
+   };
 
   const addSong = (song: Song) => {
-    setSongs(prev => [...prev, song]);
-    setProjects(prev => prev.map(p => 
-      p.id === song.projectId ? { ...p, songCount: p.songCount + 1 } : p
-    ));
-    if (hasSupabase()) {
-      const supabase = getSupabase();
-      (async () => {
-        try {
-          const payload: any = {
-            project_id: song.projectId,
-            title: song.title,
-            artist: song.artist,
-            album: (song as any).album ?? null,
-            key: (song as any).key ?? null,
-            tempo: song.bpm ?? null,
-            difficulty: song.difficulty ?? null,
-            status: song.status ?? null,
-            tab_url: song.tabUrl ?? null,
-            backing_track_url: (song as any).backingTrackUrl ?? null,
-            reference_url: (song as any).referenceUrl ?? null,
-            tab_content: (song as any).tabContent ?? null,
-            notes: (song as any).notes ?? null,
-            last_played_at: song.lastPlayed ? new Date(song.lastPlayed).toISOString() : null,
-          };
+     setSongs(prev => [...prev, song]);
+     setProjects(prev => prev.map(p =>
+       p.id === song.projectId ? { ...p, songCount: p.songCount + 1 } : p
+     ));
+     if (hasSupabase()) {
+       const supabase = getSupabase();
+       (async () => {
+         try {
+           const payload: any = {
+             project_id: song.projectId,
+             title: song.title,
+             artist: song.artist,
+             album: (song as any).album ?? null,
+             key: (song as any).key ?? null,
+             tempo: song.bpm ?? null,
+             difficulty: song.difficulty ?? null,
+             status: song.status ?? null,
+             tab_url: song.tabUrl ?? null,
+             backing_track_url: (song as any).backingTrackUrl ?? null,
+             reference_url: (song as any).referenceUrl ?? null,
+             tab_content: (song as any).tabContent ?? null,
+             notes: (song as any).notes ?? null,
+             last_played_at: song.lastPlayed ? new Date(song.lastPlayed).toISOString() : null,
+           };
 
-          const { data, error } = await supabase.from('songs').insert(payload).select().single();
-          if (error) throw error;
-          if (data) {
-            if (song.components && song.components.length > 0) {
-              const componentPayloads = song.components.map(comp => ({
-                song_id: data.id,
-                name: comp.name,
-                type: comp.type,
-                progress: comp.progress ?? 0,
-                notes: (comp as any).notes ?? null,
-              }));
-              const { error: compErr } = await supabase.from('song_components').insert(componentPayloads);
-              if (compErr) throw compErr;
-            }
-            const normalized = normalizeSong({ ...data, components: song.components });
-            setSongs(prev => prev.map(s => s.id === song.id ? normalized : s));
-          }
-        } catch (error) {
-          console.error('Supabase insert song error:', error);
-          setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting song');
-        }
-      })();
-    }
-  };
+           const { data, error } = await supabase.from('songs').insert(payload).select().single();
+           if (error) throw error;
+           if (data) {
+             if (song.components && song.components.length > 0) {
+               const componentPayloads = song.components.map(comp => ({
+                 song_id: data.id,
+                 name: comp.name,
+                 type: comp.type,
+                 progress: comp.progress ?? 0,
+                 notes: (comp as any).notes ?? null,
+               }));
+               const { error: compErr } = await supabase.from('song_components').insert(componentPayloads);
+               if (compErr) throw compErr;
+             }
+             const normalized = normalizeSong({ ...data, components: song.components });
+             setSongs(prev => prev.map(s => s.id === song.id ? normalized : s));
+           }
+         } catch (error) {
+           console.error('Supabase insert song error:', error);
+           setDbError((error as any)?.message ? String((error as any).message) : 'Error inserting song');
+         }
+       })();
+     }
+   };
+
+   const removeSong = (id: string) => {
+     const song = songs.find(s => s.id === id);
+     if (!song) return;
+     setSongs(prev => prev.filter(s => s.id !== id));
+     setProjects(prev => prev.map(p =>
+       p.id === song.projectId ? { ...p, songCount: Math.max(0, p.songCount - 1) } : p
+     ));
+     // Remove from scheduled songs
+     setScheduledSongs(prev => {
+       const newPrev = { ...prev };
+       Object.keys(newPrev).forEach(date => {
+         newPrev[date] = newPrev[date].filter(s => s.songId !== id);
+       });
+       return newPrev;
+     });
+     setTodaysScheduleIds(prev => prev.filter(songId => songId !== id));
+     if (hasSupabase()) {
+       const supabase = getSupabase();
+       (async () => {
+         try {
+           // Delete song components first
+           const { error: compErr } = await supabase.from('song_components').delete().eq('song_id', id);
+           if (compErr) throw compErr;
+           // Delete practice sessions
+           const { error: sessErr } = await supabase.from('practice_sessions').delete().eq('song_id', id);
+           if (sessErr) throw sessErr;
+           // Delete practice videos
+           const { error: vidErr } = await supabase.from('practice_videos').delete().eq('song_id', id);
+           if (vidErr) throw vidErr;
+           // Delete from schedule
+           const { error: schedErr } = await supabase.from('practice_schedule').delete().eq('song_id', id);
+           if (schedErr) throw schedErr;
+           // Delete song
+           const { error } = await supabase.from('songs').delete().eq('id', id);
+           if (error) throw error;
+         } catch (error) {
+           console.error('Supabase delete song error:', error);
+           setDbError((error as any)?.message ? String((error as any).message) : 'Error deleting song');
+         }
+       })();
+     }
+   };
 
   const addTonePreset = (preset: TonePreset) => {
     setTonePresets(prev => [...prev, preset]);
@@ -658,7 +733,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       practiceSessions,
       practiceVideos,
       addProject,
+      removeProject,
       addSong,
+      removeSong,
       addTonePreset,
       updateTonePreset,
       deleteTonePreset,

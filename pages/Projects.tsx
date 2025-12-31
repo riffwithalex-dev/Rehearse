@@ -4,7 +4,7 @@ import { GlassCard } from '../components/ui/GlassCard';
 import { SongCard } from '../components/SongCard';
 import { useNavigate } from 'react-router-dom';
 import { generateUUID } from '../lib/uuid';
-import { Plus, LayoutGrid, List, X } from 'lucide-react';
+import { Plus, LayoutGrid, List, X, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -25,7 +25,7 @@ import { Project, Song, Difficulty, SongStatus } from '../types';
 
 export const Projects: React.FC = () => {
   const navigate = useNavigate();
-  const { projects, songs: allSongs, addProject, addSong } = useData();
+  const { projects, songs: allSongs, addProject, removeProject, addSong, removeSong } = useData();
   
   const [activeProject, setActiveProject] = useState(projects[0]?.id || '');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -311,8 +311,8 @@ export const Projects: React.FC = () => {
             onClick={() => setActiveProject(project.id)}
             className={`
               whitespace-nowrap px-6 py-3 rounded-2xl text-sm font-medium transition-all duration-300
-              ${activeProject === project.id 
-                ? 'bg-white text-gray-900 shadow-md shadow-gray-100 ring-1 ring-gray-100' 
+              ${activeProject === project.id
+                ? 'bg-white text-gray-900 shadow-md shadow-gray-100 ring-1 ring-gray-100'
                 : 'bg-transparent text-gray-400 hover:bg-white/50 hover:text-gray-600'}
             `}
           >
@@ -327,12 +327,25 @@ export const Projects: React.FC = () => {
               <div className="text-sm text-gray-500">
                  <span className="font-medium text-gray-900">{songs.length}</span> songs in repertoire
               </div>
-              <button 
-                onClick={() => setIsCreatingSong(true)}
-                className="text-sm font-medium text-gray-900 hover:text-gray-600 underline decoration-gray-300 underline-offset-4"
-              >
-                Add Song
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete the project "${currentProject.name}"? This will also delete all songs in this project.`)) {
+                      removeProject(currentProject.id);
+                    }
+                  }}
+                  className="text-sm font-medium text-red-600 hover:text-red-700 flex items-center gap-1"
+                >
+                  <Trash2 size={14} />
+                  Delete Project
+                </button>
+                <button
+                  onClick={() => setIsCreatingSong(true)}
+                  className="text-sm font-medium text-gray-900 hover:text-gray-600 underline decoration-gray-300 underline-offset-4"
+                >
+                  Add Song
+                </button>
+              </div>
            </div>
 
            {songs.length === 0 && (
@@ -350,12 +363,13 @@ export const Projects: React.FC = () => {
            {viewMode === 'grid' ? (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                {songs.map((song, idx) => (
-                 <SongCard 
-                  key={song.id} 
-                  song={song} 
+                 <SongCard
+                  key={song.id}
+                  song={song}
                   index={idx}
                   viewMode="grid"
-                  onClick={(id) => navigate(`/song/${id}`)} 
+                  onClick={(id) => navigate(`/song/${id}`)}
+                  onDelete={removeSong}
                  />
                ))}
                
@@ -385,6 +399,7 @@ export const Projects: React.FC = () => {
                      song={song!}
                      viewMode="list"
                      onClick={(id) => navigate(`/song/${id}`)}
+                     onDelete={removeSong}
                    />
                  ))}
                  <div className="pt-2">

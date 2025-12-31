@@ -1,13 +1,14 @@
 import React from 'react';
 import { Song } from '../types';
 import { GlassCard } from './ui/GlassCard';
-import { PlayCircle, AlertCircle, CheckCircle2, Music2, Clock, GripVertical } from 'lucide-react';
+import { PlayCircle, AlertCircle, CheckCircle2, Music2, Clock, GripVertical, Trash2 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 interface SongCardProps {
   song: Song;
   onClick: (id: string) => void;
+  onDelete?: (id: string) => void;
   index?: number;
   viewMode?: 'grid' | 'list';
   draggable?: boolean;
@@ -31,7 +32,7 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, viewMode = 'grid', draggable = false, data }) => {
+export const SongCard: React.FC<SongCardProps> = ({ song, onClick, onDelete, index = 0, viewMode = 'grid', draggable = false, data }) => {
   const {
     attributes,
     listeners,
@@ -66,6 +67,19 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, vi
           <div className="text-gray-300 cursor-grab active:cursor-grabbing hover:text-gray-500">
             <GripVertical size={20} />
           </div>
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Are you sure you want to delete "${song.title}" by ${song.artist}?`)) {
+                  onDelete(song.id);
+                }
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
 
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-medium text-gray-900 tracking-tight truncate">
@@ -117,12 +131,27 @@ export const SongCard: React.FC<SongCardProps> = ({ song, onClick, index = 0, vi
             </h3>
             <p className="text-sm text-gray-500 font-light">{song.artist}</p>
             </div>
-            <div className={`
-            flex items-center px-2.5 py-1 rounded-full text-xs font-medium border
-            ${getStatusColor(song.status)}
-            `}>
-            {getStatusIcon(song.status)}
-            {song.status}
+            <div className="flex items-center gap-2">
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Are you sure you want to delete "${song.title}" by ${song.artist}?`)) {
+                      onDelete(song.id);
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+              <div className={`
+              flex items-center px-2.5 py-1 rounded-full text-xs font-medium border
+              ${getStatusColor(song.status)}
+              `}>
+              {getStatusIcon(song.status)}
+              {song.status}
+              </div>
             </div>
         </div>
 
